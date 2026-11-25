@@ -39,6 +39,8 @@
     return Math.max(1, Math.round(row.tvl_usd * model.base_multiple * growthMult * maturity * reach));
   }
 
+  // A DOM helper: el(tag, attrs, ...children). One place builds every node, so the page has no
+  // innerHTML templates and no third-party code anywhere in its render path.
   function el(tag, attrs) {
     var node = document.createElement(tag);
     if (attrs) {
@@ -124,6 +126,7 @@
     return { perAction: 2, setup: 5 };
   }
 
+  // The URL hash is the page's memory: q, p and category survive a reload and a share.
   function readHash() {
     var hash = window.location.hash.replace(/^#/, '');
     if (!hash) return;
@@ -142,6 +145,8 @@
     else window.history.replaceState(null, '', window.location.pathname + window.location.search);
   }
 
+  // The rows the filters leave: category, the TVL band, and the search across name, slug,
+  // category and chains. Sorting happens on top of these, never instead of them.
   function rows() {
     var q = state.q.trim().toLowerCase();
     return DATA.rows.filter(function (r) {
