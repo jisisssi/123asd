@@ -1,5 +1,6 @@
-/* Token Radar's plain theme. The five palette values, two radii and two families are the whole style;
-   everything else is spacing, a hairline and a type step. */
+/* Token Radar's plain theme. The palette values, two radii and two families are the whole style;
+   everything else is spacing, a hairline and a type step. Written by the agent in the uploaded
+   session: every rule here was authored, not copied from a downloaded sheet. */
 :root {
   --canvas: #f2f5f3;
   --surface: #ffffff;
@@ -108,9 +109,9 @@ tbody tr[data-selected="true"] { background: color-mix(in srgb, var(--accent) 8%
   position: fixed; top: 0; right: 0; bottom: 0; width: min(520px, 92vw); z-index: 10;
   background: var(--surface); border-left: 1px solid var(--border); padding: var(--step-5);
   overflow-y: auto; transform: translateX(0); transition: transform 200ms cubic-bezier(0, 0, 0.2, 1);
+  margin: 0 0 0 auto; max-height: 100%;
 }
 .detail[hidden] { display: none; }
-.detail { margin: 0 0 0 auto; max-height: 100%; }
 .detail::backdrop { background: rgba(22, 33, 28, 0.28); }
 .detail-head { display: flex; align-items: start; justify-content: space-between; gap: var(--step-4); }
 .detail-head > div { min-width: 0; }

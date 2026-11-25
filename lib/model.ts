@@ -1,21 +1,24 @@
-// The token radar's model: one snapshot of the protocol universe in, one ranked board out.
+// The token radar's model, version radar-2: one sealed snapshot in, one ranked board out.
 //
-// The board covers every slug in the snapshot's watchlist (the floor, never a ceiling) and may add
-// pre-token protocols below the watchlist floor: the early rows the radar exists to find. A protocol is
-// pre-token when its index entry records no token (no market cap, no CoinGecko id, no symbol); the
-// snapshot's live-token protocols are kept apart and shown as the market's own values, never mixed into
-// the ranked board.
+// The board covers every slug in the snapshot's watchlist (the floor, never a ceiling) and adds the
+// early radar: pre-token protocols below the watchlist floor, by TVL. A protocol is pre-token when
+// its index entry records no token at all (no market cap, no CoinGecko id, no symbol); the snapshot's
+// live-token protocols are kept apart and shown at the market's own values, never mixed into the
+// ranked board.
 //
-// Implied value follows only from the snapshot's own figures:
+// Implied value follows only from the snapshot's own figures, through four factors:
 //
-//   base       = tvl_usd x BASE_MULTIPLE
-//   growth     = clamp(change_7d, -60, 120) per cent
-//   growthMult = 1 + (growth / 100) x GROWTH_WEIGHT
-//   maturity   = 0.6 + min(age_days, 1095) / 1095 x 0.4   (age_days unknown: 365)
-//   implied    = max(1, round(base x growthMult x maturity))
+//   base       = tvl_usd x base_multiple
+//   growth     = sign(g) x |clamp(g, growth_floor, growth_cap)| ^ growth_curve   (g = change_7d)
+//   growthMult = 1 + (growth / 100) x growth_weight
+//   maturity   = maturity_floor + min(age_days, maturity_days) / maturity_days x maturity_range
+//   reach      = reach_floor + min(chains, reach_cap_chains) x reach_per_chain
+//   implied    = max(1, round(base x growthMult x maturity x reach))
 //
-// The constants are the house model's, stated in the dashboard and changeable in the model sandbox. No
-// protocol name is ever special-cased: the same function scores every row.
+// Growth is concave (radar-2's change from radar-1): one wild week cannot dominate the board, because
+// a +120% week scores as a +58% week would linearly. Reach is the distribution proxy: a protocol live
+// on more chains reaches more users, capped so one sprawl cannot outrun substance. No protocol name is
+// ever special-cased: the same function scores every row.
 
 /** The snapshot's protocol entry: exactly the ten fields the sealed input carries. */
 export interface SnapshotProtocol {
@@ -184,21 +187,26 @@ export function ageDays(asOf: string, listedAt: string | null): number | null {
   return Math.max(0, Math.floor((a - b) / DAY_MS));
 }
 
-/** The four multipliers and the implied value one protocol gets under `model`. */
-export function impliedValue(protocol: SnapshotProtocol, asOf: string, model: ModelConstants): { implied: number; growthPct: number; growthMult: number; maturityMult: number; reachMult: number; age: number | null } {
+/** The four factors and the implied value one protocol gets under `model`. */
+export function impliedValue(protocol: SnapshotProtocol, asOf: string, model: ModelConstants): {
+  implied: number;
+  growthPct: number;
+  growthMult: number;
+  maturityMult: number;
+  reachMult: number;
+  age: number | null;
+} {
   const age = ageDays(asOf, protocol.listed_at);
   const rawGrowth = finite(protocol.change_7d, 0);
+  // The clamp keeps the raw week inside the model's band, then the concave shape tames it:
+  // sign keeps the direction, the curve pulls extremes down (120 ^0.7 is about 32).
   const growthPct = Math.min(model.growth_cap, Math.max(model.growth_floor, rawGrowth));
-  // Concave growth: sign kept, magnitude raised to the curve exponent, so a +120% week moves the
-  // score like a +58% week would linearly and a -60% week like -42%. One wild week cannot dominate.
   const shaped = Math.sign(growthPct) * Math.pow(Math.abs(growthPct), model.growth_curve);
   const growthMult = 1 + (shaped / 100) * model.growth_weight;
   const ageForModel = age ?? model.unknown_age_days;
   const maturityMult = model.maturity_floor + (Math.min(Math.max(ageForModel, 0), model.maturity_days) / model.maturity_days) * model.maturity_range;
-  // Reach: a protocol live on more chains has more surfaces for an airdrop to check. Derived from the
-  // snapshot's own chains array, capped so a 30-chain protocol does not lap a 10-chain one.
-  const chains = Math.min(protocol.chains.length, model.reach_cap_chains);
-  const reachMult = model.reach_floor + chains * model.reach_per_chain;
+  const chainCount = Math.min(protocol.chains.length, model.reach_cap_chains);
+  const reachMult = model.reach_floor + chainCount * model.reach_per_chain;
   const base = protocol.tvl_usd * model.base_multiple;
   const implied = Math.max(1, Math.round(base * growthMult * maturityMult * reachMult));
   return { implied, growthPct, growthMult, maturityMult, reachMult, age };
@@ -295,23 +303,22 @@ function chainOf(p: SnapshotProtocol): string {
   return p.chains.length > 0 ? p.chains[0]! : 'its main chain';
 }
 
+/** Rough per-action gas on the protocol's first chain, from the snapshot's own chain list. */
+function gasFor(p: SnapshotProtocol): { perAction: number; setup: number } {
+  const c = chainOf(p).toLowerCase();
+  if (c.includes('ethereum')) return { perAction: 8, setup: 12 };
+  if (c.includes('solana')) return { perAction: 1, setup: 1 };
+  if (c.includes('arbitrum') || c.includes('optimism') || c.includes('base') || c.includes('unichain')) return { perAction: 1, setup: 3 };
+  if (c.includes('polygon') || c.includes('bnb')) return { perAction: 1, setup: 2 };
+  return { perAction: 2, setup: 5 };
+}
+
 /** How much capital one farm position needs, from the protocol's own TVL. */
 function capitalFor(p: SnapshotProtocol): number {
   if (p.tvl_usd >= 5_000_000_000) return 250;
   if (p.tvl_usd >= 1_000_000_000) return 150;
   if (p.tvl_usd >= 100_000_000) return 100;
   return 50;
-}
-
-/** Rough per-action gas on the protocol's first chain, in dollars, from the snapshot's own chain list. */
-function gasFor(p: SnapshotProtocol): { perAction: number; setup: number } {
-  const c = chainOf(p).toLowerCase();
-  if (c.includes('ethereum')) return { perAction: 8, setup: 12 };
-  if (c.includes('solana')) return { perAction: 1, setup: 1 };
-  if (c.includes('arbitrum') || c.includes('optimism') || c.includes('base') || c.includes('unichain')) return { perAction: 1, setup: 3 };
-  if (c.includes('polygon')) return { perAction: 1, setup: 2 };
-  if (c.includes('binance') || c.includes('bnb')) return { perAction: 1, setup: 2 };
-  return { perAction: 2, setup: 5 };
 }
 
 /** How long to hold, from the protocol's age: younger protocols get a longer qualifying window. */
@@ -340,16 +347,18 @@ function actionFor(p: SnapshotProtocol, capital: number, chain: string): string 
 }
 
 /**
- * A protocol's farm plan: six steps, each an action with a cost and a time. The plan is derived from
- * the protocol's own record (category, chains, TVL, age), never from a hand-written list of names.
+ * A protocol's farm plan: eight steps, each an action with a cost and a time. Derived from the
+ * protocol's own record (category, chains, TVL, age), never from a hand-written list of names.
+ * The risk step scales with age: a protocol under six months carries the verified-contracts
+ * warning, an older one the routine app-URL check. The chain step mirrors the reach factor: a
+ * multichain protocol earns a second deposit, a single-chain one keeps all activity in place.
  */
 export function farmSteps(p: SnapshotProtocol, age: number | null): FarmStep[] {
   const chain = chainOf(p);
   const capital = capitalFor(p);
-  const gas = gasFor(p);
   const hold = holdDaysFor(age);
-  const action = actionFor(p, capital, chain);
-  const chains = Math.min(p.chains.length, 10);
+  const gas = gasFor(p);
+  const chainCount = Math.min(p.chains.length, 10);
   const young = age !== null && age < 180;
   return [
     {
@@ -358,7 +367,7 @@ export function farmSteps(p: SnapshotProtocol, age: number | null): FarmStep[] {
       time: '5 minutes',
     },
     {
-      text: action,
+      text: actionFor(p, capital, chain),
       cost: `$${capital} of capital and about $${gas.setup} of gas`,
       time: '15 minutes to set up',
     },
@@ -375,16 +384,16 @@ export function farmSteps(p: SnapshotProtocol, age: number | null): FarmStep[] {
     {
       text: young
         ? `${p.name} is under six months old, so size the position as risk capital and check that its contracts are verified before you deposit.`
-        : `${p.name} has been live since ${p.listed_at ?? 'its listing'}, so contracts have had time to settle, but still confirm the app's URL before you sign.`,
+        : `${p.name} has been live for a while, but still confirm the app URL before you sign.`,
       cost: 'no fee to check',
       time: '10 minutes',
     },
     {
-      text: chains > 1
-        ? `Repeat the deposit on a second of ${p.name}'s ${p.chains.length} chains if the airdrop rules weight multi-chain users.`
+      text: chainCount > 1
+        ? `Repeat the deposit on a second of ${p.name}'s chains if the airdrop rules weight multi-chain users.`
         : `${p.name} is live on ${chain} only, so keep all activity there.`,
-      cost: chains > 1 ? `a second $${capital >= 150 ? 100 : 50} position, plus $${gas.setup} of gas` : 'no extra cost',
-      time: chains > 1 ? '15 minutes' : 'no extra time',
+      cost: chainCount > 1 ? `a second position plus $${gas.setup} of gas` : 'no extra cost',
+      time: chainCount > 1 ? '15 minutes' : 'no extra time',
     },
     {
       text: `Before you withdraw, open the protocol's own points or rewards page and claim only from the link it publishes.`,
