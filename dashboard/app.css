@@ -150,3 +150,15 @@ tbody tr[data-selected="true"] { background: color-mix(in srgb, var(--accent) 8%
 /* TVL range row: two compact number boxes. */
 .range { display: flex; gap: var(--step-1); align-items: center; }
 .range input { width: 110px; padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--surface); font-family: var(--font-num); font-size: 13px; }
+
+/* ---- Launch watch panel (insights.js) ---- */
+.insights { margin-top: 24px; }
+.insight-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; }
+@media (max-width: 720px) { .insight-cols { grid-template-columns: 1fr; } }
+.insight-cols h3 { margin: 0 0 12px; font-size: 15px; }
+.mover-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid #eee; }
+.mover-row b { flex: 0 0 180px; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.spark { display: inline-block; height: 10px; border-radius: 3px; background: #0d7a3f; }
+.spark.neg { background: #b3261e; }
+.spark.chain { background: #2456a6; }
+.mover-val { font-size: 12.5px; color: #555; white-space: nowrap; margin-left: auto; }
