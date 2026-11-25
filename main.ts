@@ -21,13 +21,18 @@ function outputDir(): string {
   return join(process.cwd(), 'out');
 }
 
-/** The snapshot's path: --input <file>, else input/snapshot.json beside this script's kit. */
+/** The snapshot's path: --input <file>, else $MAKEFUN_INPUT_DIR/snapshot.json, else input/ beside cwd. */
 function inputPath(argv: string[]): string {
   const i = argv.indexOf('--input');
   if (i >= 0 && argv[i + 1] !== undefined) return argv[i + 1]!;
+  const fromEnv = process.env.MAKEFUN_INPUT_DIR;
+  if (fromEnv !== undefined && fromEnv !== '') {
+    const inEnv = join(fromEnv, 'snapshot.json');
+    if (existsSync(inEnv)) return inEnv;
+  }
   const beside = join(process.cwd(), 'input', 'snapshot.json');
   if (existsSync(beside)) return beside;
-  throw new Error('no snapshot: pass --input <snapshot.json> or run beside input/snapshot.json');
+  throw new Error('no snapshot: pass --input <snapshot.json>, set MAKEFUN_INPUT_DIR, or run beside input/snapshot.json');
 }
 
 /** Which dashboard and screenshot names the gate accepts: plain names, letters, digits, dash, dot. */
