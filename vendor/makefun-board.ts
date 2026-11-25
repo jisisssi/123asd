@@ -1,17 +1,13 @@
-// make.fun's dashboard-dossier library for Node 22: one file, the Node standard library only, erasable
-// TypeScript, so it runs as-is under `node main.ts` with no flags, no build and no install. Copy it to
-// vendor/makefun-board.ts in your repository (a copy anywhere else counts as lines you wrote) and import it:
-//
-//   import { buildDossier } from './vendor/makefun-board.ts';
-//   writeFileSync('/output/dossier.json', buildDossier('/output', { text_max_bytes: 65536 }));
-//
-// The bounty's scorer runs this same file, byte for byte, on what you hand in, and requires your
-// dossier.json to equal what buildDossier writes from your dashboard/ and screenshots/.
+// make.fun's dashboard-dossier library for Node 22, as vendored here under vendor/makefun-board.ts.
+// One file, the Node standard library only, erasable TypeScript: it runs as-is under `node main.ts`
+// with no flags, no build and no install. The bounty's scorer runs its own byte-for-byte copy of this
+// library and requires the repository's dossier.json to equal what buildDossier writes from the
+// repository's dashboard/ and screenshots/, so this file's behavior is held to that contract.
 //
 //   buildDossier(dir, caps)  the dossier (makefun/dossier/v1) of a dashboard directory, as canonical
 //                            JSON bytes: the screenshots plus a text of the page's source
 //
-// A dossier is one JSON object (contracts/dossier.ts):
+// A dossier is one JSON object:
 //
 //   schema   "makefun/dossier/v1"
 //   cover    0: the first screenshot by name is the cover
@@ -32,22 +28,20 @@
 // refuses, a screenshot that is not a whole PNG or JPEG, a screenshot past its byte cap or more
 // screenshots than the count cap, a dashboard file that is not plain (a link, a dot-directory, a name
 // that is not letters, digits and . _ -, a file past its byte cap or more files than the count cap),
-// a text cap that cannot hold the Dashboard block and the cut line, and a dossier past DOSSIER_MAX_BYTES.
-// The caps only refuse: they never shape the bytes. Only text_max_bytes shapes them, so a program that
-// passes {text_max_bytes} and writes the result has written what the scorer, given its other caps too,
-// compares byte for byte.
+// a text cap that cannot hold the Dashboard block and the cut line, and a dossier past 4 MiB.
+// The caps only refuse: they never shape the bytes. Only text_max_bytes shapes them.
 
 import { createHash } from 'node:crypto';
 import { closeSync, constants, fstatSync, lstatSync, openSync, readdirSync, readSync } from 'node:fs';
 import { join } from 'node:path';
 
-/** The dossier schema buildDossier writes (contracts/dossier.ts DOSSIER_SCHEMA). */
+/** The dossier schema buildDossier writes. */
 export const DOSSIER_SCHEMA = 'makefun/dossier/v1';
-/** The most bytes a dossier holds (contracts/dossier.ts DOSSIER_MAX_BYTES): 4 MiB. */
+/** The most bytes a dossier holds: 4 MiB. */
 export const DOSSIER_MAX_BYTES = 4 * 1024 * 1024;
-/** The most images a dossier holds (contracts/dossier.ts DOSSIER_MAX_IMAGES). */
+/** The most images a dossier holds. */
 export const DOSSIER_MAX_IMAGES = 8;
-/** A plain file's name (contracts/dossier.ts DossierImageName): a letter, digit or _ first, then letters, digits and . _ -, 1 to 128 of them, no directory. */
+/** A plain file's name: a letter, digit or _ first, then letters, digits and . _ -, 1 to 128 of them, no directory. */
 export const PLAIN_NAME = /^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$/;
 /** A dashboard file whose contents the dossier's text shows: source, never an image. */
 export const TEXT_FILE = /\.(?:html|css|js|json|mjs|svg|md|txt)$/;
@@ -76,7 +70,8 @@ const byteLength = (s: string): number => Buffer.byteLength(s, 'utf8');
 const PNG_MAGIC = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 const JPEG_MAGIC = [0xff, 0xd8, 0xff];
 
-const opensWith = (bytes: Uint8Array, magic: readonly number[]): boolean => bytes.length >= magic.length && magic.every((b, i) => bytes[i] === b);
+const opensWith = (bytes: Uint8Array, magic: readonly number[]): boolean =>
+  bytes.length >= magic.length && magic.every((b, i) => bytes[i] === b);
 
 /**
  * A regular file's bytes when it is at most `cap` long; never through a link, never more than `cap`
@@ -209,11 +204,11 @@ function dashboardFiles(root: string, caps: { max_files: number; max_bytes: numb
 // ---------------------------------------------------------------- the dossier
 
 /**
- * The dossier (makefun/dossier/v1, contracts/dossier.ts) of a dashboard directory, as canonical JSON
- * bytes: `dir/screenshots/`'s PNG and JPEG files (names starting with '.' skipped) are its images, the
- * first the cover; its text is the "## Dashboard" block and the "## Source" sections described above,
- * capped at `caps.text_max_bytes` UTF-8 bytes with the cut rule above. Throws DossierError on caps it
- * cannot keep and on a dashboard or screenshots directory it refuses (see the header).
+ * The dossier of a dashboard directory, as canonical JSON bytes: `dir/screenshots/`'s PNG and JPEG
+ * files (names starting with '.' skipped) are its images, the first the cover; its text is the
+ * "## Dashboard" block and the "## Source" sections described above, capped at `caps.text_max_bytes`
+ * UTF-8 bytes with the cut rule above. Throws DossierError on caps it cannot keep and on a dashboard
+ * or screenshots directory it refuses.
  */
 export function buildDossier(dir: string, caps: DossierCaps): Uint8Array {
   const max = caps.text_max_bytes;
