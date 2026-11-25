@@ -1,2 +1,3 @@
 # generated output: recreate with node main.ts --input <snapshot>
 out/
+*.bin
