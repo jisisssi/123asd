@@ -56,6 +56,13 @@ function buildOutputDossier(out: string, opts: { text_max_bytes: number }): stri
   return buildDossier(out, opts);
 }
 
+/** The bot's own directory: $MAKEFUN_BOT_DIR (the grader mounts the repo there), else cwd. */
+function botDir(): string {
+  const fromEnv = process.env.MAKEFUN_BOT_DIR;
+  if (fromEnv !== undefined && fromEnv !== '') return fromEnv;
+  return process.cwd();
+}
+
 function main(): void {
   const out = outputDir();
   const snapshotPath = inputPath(process.argv.slice(2));
@@ -73,10 +80,10 @@ function main(): void {
   writeFileSync(join(out, 'board.json'), JSON.stringify({ model_version: MODEL_VERSION, rows: board }, null, 2));
   writeFileSync(join(out, 'data.js'), dataScript(radar));
 
-  const dashFrom = join(process.cwd(), 'dashboard');
+  const dashFrom = join(botDir(), 'dashboard');
   copyTree(dashFrom, join(out, 'dashboard'));
 
-  const shotFrom = join(process.cwd(), 'screenshots');
+  const shotFrom = join(botDir(), 'screenshots');
   const shotTo = join(out, 'screenshots');
   mkdirSync(shotTo, { recursive: true });
   const shots = readdirSync(shotFrom).filter((n) => IMAGE_NAME.test(n));
